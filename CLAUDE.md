@@ -4,7 +4,7 @@
 
 Medir o **nível de cada questão** e o **nível da prova** a partir das respostas dos alunos, com a Teoria Clássica dos Testes (dificuldade, discriminação D, ponto-bisserial, KR-20). Fontes de dados: prova simulada (modelo TRI 3PL), microdados do ENEM e CSV de professor.
 
-Fases 1 a 3 (ingestão, teoria clássica, TRI 3PL) estão prontas. Próximas: validar a TRI contra os parâmetros oficiais do INEP e app Streamlit.
+Fases 1 a 4 (ingestão, teoria clássica, TRI 3PL, app Streamlit) estão prontas. A validação contra os parâmetros oficiais do INEP está implementada, mas ainda não rodou com os microdados reais.
 
 ## Estrutura
 
@@ -13,9 +13,10 @@ src/
 ├── ingestao.py    # ENEM e CSV → matriz 0/1 (corrigir, carregar_enem, carregar_csv); carregar_itens_inep (parâmetros oficiais)
 ├── simulacao.py   # gerador de provas pelo 3PL, com parâmetros verdadeiros conhecidos
 ├── classica.py    # métricas por questão + KR-20 (entrada: matriz 0/1)
-├── tri.py         # 3PL: estimar_itens (MML, scipy) → a, b, c; estimar_theta (EAP) → theta, erro_padrao; comparar_com_inep
+├── tri.py         # 3PL: estimar_itens (MML, scipy) → a, b, c; estimar_theta (EAP) → theta, erro_padrao; informacao, curva_empirica; comparar_com_inep
 ├── relatorio.py   # faixas (nível, qualidade, KR-20), alertas, resumo, saída; grafico_b_inep (PNG, matplotlib Agg)
 └── cli.py         # python -m src.cli <simular|enem|csv|tri>
+app.py             # Streamlit + plotly: só interface; toda a análise vem de src/
 tests/test_analise.py   # pytest, agrupado por módulo (ingestão, métricas, classificação, simulação, TRI)
 exemplos/          # prova de 12 alunos × 6 questões; a q6 é ruim de propósito
 data/              # microdados do ENEM (fora do git, montado no Docker)
@@ -34,6 +35,7 @@ docker compose run --rm testes             # pytest -v
 docker compose run --rm analise simular
 docker compose run --rm analise csv exemplos/respostas_exemplo.csv --gabarito exemplos/gabarito_exemplo.csv
 docker compose run --rm analise enem data/MICRODADOS_ENEM_2023.csv --area MT --alunos 10000
+docker compose up -d app                   # app web em http://localhost:8501 (docker compose down para parar)
 ```
 
 Só `data/` e `saida/` são volumes. O resto vem da imagem, então sem `build` o container roda o código antigo.
@@ -63,4 +65,5 @@ No terminal do Windows, defina `PYTHONIOENCODING=utf-8`, senão o `imprimir` que
 - **Microdados do ENEM**: `;` como separador, `latin-1`, vários GB. Leia em pedaços (`chunksize`) e só com as colunas necessárias. Cada cor de caderno (`CO_PROVA_*`) tem outra ordem de questões, então a análise usa um caderno só. Linguagens (LC) fica de fora (língua estrangeira).
 - **TRI**: não use a lib `girth` (quebra com numpy 2 / scipy atuais). `tri.py` usa a mesma constante `D` e a mesma `prob_acerto` de `simulacao.py`, então mudar o modelo lá muda a estimação. Os priors (b, c) e os limites de a, b e c são constantes no topo de `tri.py`. O `a` pode ser negativo de propósito (questão defeituosa). Ao mexer em `_objetivo`, confira o gradiente com `scipy.optimize.check_grad`.
 - **Parâmetros do INEP**: estão em outra escala. Compare por correlação e converta com média-desvio, nunca pelo valor absoluto. A ligação item ↔ coluna é a ordem de `CO_POSICAO` dentro de (`SG_AREA`, `CO_PROVA`). Os testes geram microdados e `ITENS_PROVA` sintéticos (fixture `enem_sintetico`), porque o arquivo real não está no repositório.
+- **App**: `app.py` não calcula nada por conta própria; função nova de análise vai para `src/` (com teste). Os testes do app usam `streamlit.testing.v1.AppTest` (os widgets da simulação têm `key`); `AppTest` não simula upload, por isso `carregar_csv` aceita arquivo em memória e tem teste próprio. `width="stretch"` substitui o `use_container_width` (obsoleto).
 - `classica.discriminacao_grupos` e `ponto_bisserial` usam o total da própria prova. Bisserial e KR-20 retornam `NaN` quando não há variância. Trate `NaN` nas funções de `relatorio`.

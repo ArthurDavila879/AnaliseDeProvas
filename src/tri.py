@@ -123,6 +123,35 @@ def estimar_theta(respostas: pd.DataFrame, itens: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame({"theta": theta, "erro_padrao": erro}, index=respostas.index)
 
 
+def informacao(theta: np.ndarray, itens: pd.DataFrame) -> pd.DataFrame:
+    """Informação de Fisher de cada questão em cada θ (3PL; Birnbaum, 1968).
+
+    Diz o quanto a questão "mede bem" alunos daquela habilidade: é alta perto
+    de b e cresce com a². O chute (c) reduz a informação. A informação da
+    prova é a soma das colunas, e o erro padrão de θ ≈ 1/√informação.
+
+    Retorna DataFrame θ × questões.
+    """
+    theta = np.asarray(theta, dtype=float)
+    a, c = itens["a"].to_numpy(), itens["c"].to_numpy()
+    p = np.clip(prob_acerto(theta, a, itens["b"].to_numpy(), c), EPS, 1 - EPS)
+    info = (D * a) ** 2 * (1 - p) / p * ((p - c) / (1 - c)) ** 2
+    return pd.DataFrame(info, index=pd.Index(theta, name="theta"), columns=itens.index)
+
+
+def curva_empirica(acertos: pd.Series, theta: pd.Series, n_grupos: int = 10) -> pd.DataFrame:
+    """Proporção de acerto observada por faixa de habilidade (quantis de θ).
+
+    Serve para conferir o ajuste: os pontos devem cair perto da curva
+    característica do item. Retorna DataFrame com theta (média da faixa),
+    proporcao e n por faixa.
+    """
+    grupos = pd.qcut(theta.rank(method="first"), q=min(n_grupos, len(theta)), labels=False)
+    dados = pd.DataFrame({"theta": theta.to_numpy(), "acerto": acertos.to_numpy(), "grupo": grupos.to_numpy()})
+    tabela = dados.groupby("grupo").agg(theta=("theta", "mean"), proporcao=("acerto", "mean"), n=("acerto", "size"))
+    return tabela.reset_index(drop=True)
+
+
 def comparar_com_inep(estimados: pd.DataFrame, oficiais: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     """Compara os parâmetros estimados com os oficiais do INEP (ITENS_PROVA).
 

@@ -13,6 +13,9 @@ RUN pip install -r requirements.txt
 COPY src/ src/
 COPY tests/ tests/
 COPY exemplos/ exemplos/
+COPY app.py .
+
+EXPOSE 8501
 
 ENTRYPOINT ["python", "-m", "src.cli"]
 CMD ["simular"]

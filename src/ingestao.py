@@ -7,6 +7,7 @@ Formato padrão usado no resto do projeto:
 from __future__ import annotations
 
 from pathlib import Path
+from typing import BinaryIO
 
 import numpy as np
 import pandas as pd
@@ -128,13 +129,14 @@ def carregar_itens_inep(caminho: str | Path, area: str, co_prova: int) -> pd.Dat
     return tabela
 
 
-def carregar_csv(caminho_respostas: str | Path, caminho_gabarito: str | Path | None = None) -> pd.DataFrame:
+def carregar_csv(caminho_respostas: str | Path | BinaryIO, caminho_gabarito: str | Path | BinaryIO | None = None) -> pd.DataFrame:
     """Lê uma prova no formato simples (para uso de professor).
 
     respostas.csv: coluna `aluno` + uma coluna por questão.
         - Com gabarito: as células são letras (A, B, C...).
         - Sem gabarito: as células já são 0/1.
     gabarito.csv: colunas `questao,gabarito` (nomes iguais às colunas de respostas).
+    Aceita caminho ou arquivo aberto em bytes (upload do app).
     """
     resp = pd.read_csv(caminho_respostas, dtype=str)
     if "aluno" in resp.columns:

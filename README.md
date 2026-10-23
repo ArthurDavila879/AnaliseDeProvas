@@ -2,7 +2,7 @@
 
 Mede o **nível de cada questão** e o **nível da prova** a partir das respostas dos alunos, usando a Teoria Clássica dos Testes. Funciona com uma prova simulada, com os microdados do ENEM ou com a prova de um professor em CSV.
 
-> Fases 1 a 3 do projeto (ingestão, teoria clássica e TRI 3PL). Próximas: validar a TRI contra os parâmetros oficiais do INEP e app Streamlit.
+> Fases 1 a 4 do projeto (ingestão, teoria clássica, TRI 3PL e app Streamlit). A validação contra os parâmetros oficiais do INEP já está no comando `tri --itens`.
 
 ## O que é calculado
 
@@ -37,6 +37,9 @@ docker compose run --rm analise tri --enem data/MICRODADOS_ENEM_2023.csv --area 
 
 # TRI no ENEM + comparação com os parâmetros oficiais do INEP (ITENS_PROVA_AAAA.csv, também em DADOS/ do zip)
 docker compose run --rm analise tri --enem data/MICRODADOS_ENEM_2023.csv --itens data/ITENS_PROVA_2023.csv --area MT
+
+# App web (upload de CSV ou prova simulada, gráficos e relatório para baixar)
+docker compose up -d app       # abra http://localhost:8501 · para parar: docker compose down
 
 # Testes
 docker compose run --rm testes

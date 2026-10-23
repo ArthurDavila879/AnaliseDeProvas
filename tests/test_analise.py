@@ -1,3 +1,4 @@
+import io
 from pathlib import Path
 
 import numpy as np
@@ -6,7 +7,8 @@ import pytest
 
 from src import classica, cli, ingestao, relatorio, simulacao, tri
 
-EXEMPLOS = Path(__file__).resolve().parent.parent / "exemplos"
+RAIZ = Path(__file__).resolve().parent.parent
+EXEMPLOS = RAIZ / "exemplos"
 
 
 # ---------- ingestão ----------
@@ -21,6 +23,14 @@ def test_carregar_csv_com_gabarito():
     matriz = ingestao.carregar_csv(EXEMPLOS / "respostas_exemplo.csv", EXEMPLOS / "gabarito_exemplo.csv")
     assert matriz.shape == (12, 6)
     assert matriz.loc["a01"].tolist() == [1, 1, 1, 1, 1, 0]
+
+
+def test_carregar_csv_aceita_arquivo_em_memoria():
+    # É assim que o app passa o upload do Streamlit.
+    respostas = io.BytesIO((EXEMPLOS / "respostas_exemplo.csv").read_bytes())
+    gabarito = io.BytesIO((EXEMPLOS / "gabarito_exemplo.csv").read_bytes())
+    assert ingestao.carregar_csv(respostas, gabarito).equals(
+        ingestao.carregar_csv(EXEMPLOS / "respostas_exemplo.csv", EXEMPLOS / "gabarito_exemplo.csv"))
 
 
 def test_carregar_csv_sem_gabarito_rejeita_letras():
@@ -152,6 +162,30 @@ def test_tri_exige_duas_questoes():
         tri.estimar_itens(pd.DataFrame({"q1": [0, 1, 1]}))
 
 
+def test_informacao_maxima_em_b_sem_chute():
+    # Sem chute (c = 0), a informação é máxima em θ = b e vale (D·a)²/4.
+    itens = pd.DataFrame({"a": [1.0, 2.0], "b": [-1.0, 0.5], "c": [0.0, 0.0]}, index=["q01", "q02"])
+    grade = np.linspace(-3, 3, 601)
+    info = tri.informacao(grade, itens)
+    assert info.idxmax().tolist() == pytest.approx([-1.0, 0.5])
+    assert info.max().tolist() == pytest.approx([(simulacao.D * 1.0) ** 2 / 4, (simulacao.D * 2.0) ** 2 / 4])
+
+
+def test_informacao_cai_com_chute():
+    sem = pd.DataFrame({"a": [1.0], "b": [0.0], "c": [0.0]}, index=["q01"])
+    com = sem.assign(c=0.25)
+    assert tri.informacao([0.0], com).iloc[0, 0] < tri.informacao([0.0], sem).iloc[0, 0]
+
+
+def test_curva_empirica_por_faixa_de_theta():
+    theta = pd.Series([-2.0, -1.0, 1.0, 2.0])
+    acertos = pd.Series([0, 0, 1, 1])
+    curva = tri.curva_empirica(acertos, theta, n_grupos=2)
+    assert curva["theta"].tolist() == [-1.5, 1.5]
+    assert curva["proporcao"].tolist() == [0.0, 1.0]
+    assert curva["n"].tolist() == [2, 2]
+
+
 def test_cli_tri_salva_itens_tri(tmp_path):
     cli.main(["tri", "--alunos", "500", "--questoes", "8", "--saida", str(tmp_path)])
     itens = pd.read_csv(tmp_path / "itens_tri.csv", index_col="questao")
@@ -254,3 +288,38 @@ def test_cli_tri_enem_com_itens_inep(enem_sintetico, tmp_path):
 def test_cli_tri_itens_sem_enem_falha(tmp_path):
     with pytest.raises(SystemExit):
         cli.main(["tri", "--itens", "x.csv", "--saida", str(tmp_path)])
+
+
+# ---------- app (Streamlit) ----------
+
+def _app_simulado(alunos: int, questoes: int):
+    from streamlit.testing.v1 import AppTest
+
+    app = AppTest.from_file(str(RAIZ / "app.py"), default_timeout=120).run()
+    app.number_input(key="sim_alunos").set_value(alunos)
+    app.number_input(key="sim_questoes").set_value(questoes)
+    return app.button(key="usar_simulada").click().run()
+
+
+def test_app_sem_dados_pede_a_prova():
+    from streamlit.testing.v1 import AppTest
+
+    app = AppTest.from_file(str(RAIZ / "app.py"), default_timeout=60).run()
+    assert not app.exception
+    assert "Usar prova simulada" in app.info[0].value
+
+
+def test_app_com_prova_simulada():
+    app = _app_simulado(alunos=600, questoes=10)
+    assert not app.exception
+    assert app.metric[0].value == "600 × 10"
+    assert len(app.dataframe) == 1
+    assert len(app.tabs) == 4
+    # Duas questões problemáticas por padrão: aparecem no painel de alertas.
+    assert int(app.metric[3].value) >= 2
+
+
+def test_app_troca_a_questao_da_curva():
+    app = _app_simulado(alunos=600, questoes=10)
+    app.selectbox[0].select("q05").run()
+    assert not app.exception
