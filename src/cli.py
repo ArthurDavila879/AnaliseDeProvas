@@ -1,4 +1,5 @@
 """Ponto de entrada: python -m src.cli <simular|enem|csv|tri> [opções]"""
+
 from __future__ import annotations
 
 import argparse
@@ -123,7 +124,9 @@ def _validar_inep(itens: pd.DataFrame, caminho_itens: str, area: str, co_prova: 
         print(f"  {p}         {resumo[f'pearson_{p}']:+.3f}    {resumo[f'spearman_{p}']:+.3f}")
     print(f"Escala (média-desvio): b_inep ≈ {resumo['escala_A']:.3f}·b {resumo['escala_B']:+.3f}")
     print(f"RMSE do b convertido: {resumo['rmse_b_convertido']:.3f}")
-    piores = tabela.loc[tabela["dif_b"].abs().nlargest(5).index, ["b_convertido", "b_inep", "a", "a_inep", "c", "c_inep"]]
+    piores = tabela.loc[
+        tabela["dif_b"].abs().nlargest(5).index, ["b_convertido", "b_inep", "a", "a_inep", "c", "c_inep"]
+    ]
     print("\nItens com maior diferença em b (já na escala do INEP):")
     print(piores.round(3).to_string())
     print(f"\nResultados salvos em {pasta}/validacao_inep.csv e {grafico}")
@@ -158,7 +161,9 @@ def main(argv: list[str] | None = None) -> None:
     fonte.add_argument("--csv", default=None, help="CSV de respostas (mesmo formato do comando csv)")
     fonte.add_argument("--enem", default=None, help="Caminho do MICRODADOS_ENEM_AAAA.csv")
     p_tri.add_argument("--gabarito", default=None, help="Gabarito do --csv")
-    p_tri.add_argument("--itens", default=None, help="ITENS_PROVA_AAAA.csv do INEP (com --enem): compara com os parâmetros oficiais")
+    p_tri.add_argument(
+        "--itens", default=None, help="ITENS_PROVA_AAAA.csv do INEP (com --enem): compara com os parâmetros oficiais"
+    )
     p_tri.add_argument("--area", default="MT", choices=["MT", "CN", "CH", "mt", "cn", "ch"])
     p_tri.add_argument("--caderno", type=int, default=None, help="CO_PROVA do --enem (padrão: o mais comum)")
     p_tri.add_argument("--alunos", type=int, default=2000, help="Alunos simulados ou amostra do ENEM")

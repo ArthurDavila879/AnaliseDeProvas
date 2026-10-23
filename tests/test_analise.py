@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import io
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -7,68 +10,79 @@ import pytest
 
 from src import classica, cli, ingestao, relatorio, simulacao, tri
 
+if TYPE_CHECKING:
+    from streamlit.testing.v1 import AppTest
+
 RAIZ = Path(__file__).resolve().parent.parent
 EXEMPLOS = RAIZ / "exemplos"
+
+# (respostas, parâmetros verdadeiros, θ verdadeiro, itens estimados, alunos estimados)
+ProvaTri = tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.DataFrame, pd.DataFrame]
+# (microdados, ITENS_PROVA, parâmetros verdadeiros)
+EnemSintetico = tuple[Path, Path, pd.DataFrame]
 
 
 # ---------- ingestão ----------
 
-def test_corrigir_branco_e_dupla_marcacao_contam_como_erro():
+
+def test_corrigir_branco_e_dupla_marcacao_contam_como_erro() -> None:
     respostas = pd.Series(["ABCDE", "A.C*E", "EDCBA"])
     matriz = ingestao.corrigir(respostas, "ABCDE")
-    assert matriz.values.tolist() == [[1, 1, 1, 1, 1], [1, 0, 1, 0, 1], [0, 0, 1, 0, 0]]
+    assert matriz.to_numpy().tolist() == [[1, 1, 1, 1, 1], [1, 0, 1, 0, 1], [0, 0, 1, 0, 0]]
 
 
-def test_carregar_csv_com_gabarito():
+def test_carregar_csv_com_gabarito() -> None:
     matriz = ingestao.carregar_csv(EXEMPLOS / "respostas_exemplo.csv", EXEMPLOS / "gabarito_exemplo.csv")
     assert matriz.shape == (12, 6)
     assert matriz.loc["a01"].tolist() == [1, 1, 1, 1, 1, 0]
 
 
-def test_carregar_csv_aceita_arquivo_em_memoria():
+def test_carregar_csv_aceita_arquivo_em_memoria() -> None:
     # É assim que o app passa o upload do Streamlit.
     respostas = io.BytesIO((EXEMPLOS / "respostas_exemplo.csv").read_bytes())
     gabarito = io.BytesIO((EXEMPLOS / "gabarito_exemplo.csv").read_bytes())
     assert ingestao.carregar_csv(respostas, gabarito).equals(
-        ingestao.carregar_csv(EXEMPLOS / "respostas_exemplo.csv", EXEMPLOS / "gabarito_exemplo.csv"))
+        ingestao.carregar_csv(EXEMPLOS / "respostas_exemplo.csv", EXEMPLOS / "gabarito_exemplo.csv")
+    )
 
 
-def test_carregar_csv_sem_gabarito_rejeita_letras():
+def test_carregar_csv_sem_gabarito_rejeita_letras() -> None:
     with pytest.raises(ValueError):
         ingestao.carregar_csv(EXEMPLOS / "respostas_exemplo.csv")
 
 
-def test_carregar_enem_escolhe_caderno_mais_comum(tmp_path):
+def test_carregar_enem_escolhe_caderno_mais_comum(tmp_path: Path) -> None:
     # Imita o formato dos microdados: ';', latin-1, colunas TX_* e CO_PROVA_*.
     linhas = ["NU_INSCRICAO;CO_PROVA_MT;TP_PRESENCA_MT;TX_RESPOSTAS_MT;TX_GABARITO_MT;NU_NOTA_MT"]
     for i in range(6):
-        linhas.append(f"{i};1001;1;ABCDE;ABCDE;700.5")   # caderno mais comum
+        linhas.append(f"{i};1001;1;ABCDE;ABCDE;700.5")  # caderno mais comum
     for i in range(6, 8):
-        linhas.append(f"{i};1002;1;EDCBA;BCDEA;400.0")   # outro caderno
-    linhas.append("8;1001;0;;;")                          # faltou: deve ser ignorado
+        linhas.append(f"{i};1002;1;EDCBA;BCDEA;400.0")  # outro caderno
+    linhas.append("8;1001;0;;;")  # faltou: deve ser ignorado
     arquivo = tmp_path / "MICRODADOS_FAKE.csv"
     arquivo.write_text("\n".join(linhas), encoding="latin-1")
 
     matriz, nota, co_prova = ingestao.carregar_enem(arquivo, area="MT", n_alunos=None, chunksize=3)
     assert co_prova == 1001
     assert matriz.shape == (6, 5)
-    assert matriz.values.all()
+    assert matriz.to_numpy().all()
     assert (nota == 700.5).all()
 
 
-def test_carregar_enem_area_invalida(tmp_path):
+def test_carregar_enem_area_invalida(tmp_path: Path) -> None:
     with pytest.raises(ValueError):
         ingestao.carregar_enem(tmp_path / "x.csv", area="LC")
 
 
 # ---------- métricas clássicas ----------
 
-def test_dificuldade_e_proporcao_de_acerto():
+
+def test_dificuldade_e_proporcao_de_acerto() -> None:
     df = pd.DataFrame({"q1": [1, 1, 1, 0], "q2": [0, 0, 0, 1]})
     assert classica.dificuldade(df).tolist() == [0.75, 0.25]
 
 
-def test_discriminacao_negativa_quando_fracos_acertam_mais():
+def test_discriminacao_negativa_quando_fracos_acertam_mais() -> None:
     # 4 itens "normais" definem quem é forte; q5 só é acertada pelos fracos.
     fortes = [[1, 1, 1, 1, 0]] * 10
     fracos = [[0, 0, 0, 0, 1]] * 10
@@ -78,32 +92,36 @@ def test_discriminacao_negativa_quando_fracos_acertam_mais():
     assert d["q5"] == pytest.approx(-1.0)
 
 
-def test_kr20_itens_identicos_vale_1():
+def test_kr20_itens_identicos_vale_1() -> None:
     col = [1, 0, 1, 1, 0, 0, 1, 0]
     df = pd.DataFrame({f"q{i}": col for i in range(5)})
     assert classica.kr20(df) == pytest.approx(1.0)
 
 
-def test_bisserial_nan_quando_todos_acertam():
+def test_bisserial_nan_quando_todos_acertam() -> None:
     df = pd.DataFrame({"q1": [1, 1, 1, 1], "q2": [1, 0, 1, 0], "q3": [1, 0, 0, 1]})
     assert np.isnan(classica.ponto_bisserial(df)["q1"])
 
 
 # ---------- classificação ----------
 
+
 @pytest.mark.parametrize("p,esperado", [(0.85, "fácil"), (0.5, "média"), (0.1, "difícil")])
-def test_nivel_questao(p, esperado):
+def test_nivel_questao(p: float, esperado: str) -> None:
     assert relatorio.nivel_questao(p) == esperado
 
 
-@pytest.mark.parametrize("d,esperado", [(-0.1, "problemática"), (0.1, "fraca"), (0.25, "regular"), (0.35, "boa"), (0.5, "ótima")])
-def test_qualidade_discriminacao(d, esperado):
+@pytest.mark.parametrize(
+    "d,esperado", [(-0.1, "problemática"), (0.1, "fraca"), (0.25, "regular"), (0.35, "boa"), (0.5, "ótima")]
+)
+def test_qualidade_discriminacao(d: float, esperado: str) -> None:
     assert relatorio.qualidade_discriminacao(d) == esperado
 
 
 # ---------- validação com simulação ----------
 
-def test_metricas_recuperam_parametros_simulados():
+
+def test_metricas_recuperam_parametros_simulados() -> None:
     respostas, parametros, _ = simulacao.simular_prova(n_alunos=3000, n_itens=30, n_problematicas=2, seed=7)
     itens, confiab = relatorio.classificar_itens(respostas)
 
@@ -120,14 +138,15 @@ def test_metricas_recuperam_parametros_simulados():
 
 # ---------- TRI (3PL) ----------
 
+
 @pytest.fixture(scope="module")
-def prova_tri():
+def prova_tri() -> ProvaTri:
     respostas, parametros, theta = simulacao.simular_prova(n_alunos=3000, n_itens=25, n_problematicas=2, seed=11)
     itens, alunos = tri.ajustar_3pl(respostas)
     return respostas, parametros, theta, itens, alunos
 
 
-def test_tri_recupera_parametros_simulados(prova_tri):
+def test_tri_recupera_parametros_simulados(prova_tri: ProvaTri) -> None:
     _, parametros, _, itens, _ = prova_tri
     assert itens.attrs["convergiu"]
     normais = ~parametros["problematica"]
@@ -137,32 +156,34 @@ def test_tri_recupera_parametros_simulados(prova_tri):
     assert (parametros.loc[normais, "c"] - itens.loc[normais, "c"]).abs().mean() < 0.08
 
 
-def test_tri_discriminacao_negativa_nas_problematicas(prova_tri):
+def test_tri_discriminacao_negativa_nas_problematicas(prova_tri: ProvaTri) -> None:
     _, parametros, _, itens, _ = prova_tri
     assert (itens.loc[parametros["problematica"], "a"] < 0).all()
 
 
-def test_tri_theta_correlaciona_com_verdadeiro(prova_tri):
+def test_tri_theta_correlaciona_com_verdadeiro(prova_tri: ProvaTri) -> None:
     respostas, _, theta, _, alunos = prova_tri
     assert alunos.shape == (len(respostas), 2)
     assert np.corrcoef(theta, alunos["theta"])[0, 1] > 0.9
     assert (alunos["erro_padrao"] > 0).all()
 
 
-def test_tri_theta_ordena_pelo_numero_de_acertos():
+def test_tri_theta_ordena_pelo_numero_de_acertos() -> None:
     # Itens iguais: θ só depende do total de acertos, e precisa crescer com ele.
     itens = pd.DataFrame({"a": [1.0] * 4, "b": [0.0] * 4, "c": [0.2] * 4}, index=[f"q{i}" for i in range(4)])
-    respostas = pd.DataFrame([[0, 0, 0, 0], [1, 0, 0, 0], [1, 1, 0, 0], [1, 1, 1, 0], [1, 1, 1, 1]], columns=itens.index)
+    respostas = pd.DataFrame(
+        [[0, 0, 0, 0], [1, 0, 0, 0], [1, 1, 0, 0], [1, 1, 1, 0], [1, 1, 1, 1]], columns=itens.index
+    )
     theta = tri.estimar_theta(respostas, itens)["theta"]
     assert theta.is_monotonic_increasing and theta.iloc[0] < 0 < theta.iloc[-1]
 
 
-def test_tri_exige_duas_questoes():
+def test_tri_exige_duas_questoes() -> None:
     with pytest.raises(ValueError):
         tri.estimar_itens(pd.DataFrame({"q1": [0, 1, 1]}))
 
 
-def test_informacao_maxima_em_b_sem_chute():
+def test_informacao_maxima_em_b_sem_chute() -> None:
     # Sem chute (c = 0), a informação é máxima em θ = b e vale (D·a)²/4.
     itens = pd.DataFrame({"a": [1.0, 2.0], "b": [-1.0, 0.5], "c": [0.0, 0.0]}, index=["q01", "q02"])
     grade = np.linspace(-3, 3, 601)
@@ -171,13 +192,13 @@ def test_informacao_maxima_em_b_sem_chute():
     assert info.max().tolist() == pytest.approx([(simulacao.D * 1.0) ** 2 / 4, (simulacao.D * 2.0) ** 2 / 4])
 
 
-def test_informacao_cai_com_chute():
+def test_informacao_cai_com_chute() -> None:
     sem = pd.DataFrame({"a": [1.0], "b": [0.0], "c": [0.0]}, index=["q01"])
     com = sem.assign(c=0.25)
     assert tri.informacao([0.0], com).iloc[0, 0] < tri.informacao([0.0], sem).iloc[0, 0]
 
 
-def test_curva_empirica_por_faixa_de_theta():
+def test_curva_empirica_por_faixa_de_theta() -> None:
     theta = pd.Series([-2.0, -1.0, 1.0, 2.0])
     acertos = pd.Series([0, 0, 1, 1])
     curva = tri.curva_empirica(acertos, theta, n_grupos=2)
@@ -186,26 +207,35 @@ def test_curva_empirica_por_faixa_de_theta():
     assert curva["n"].tolist() == [2, 2]
 
 
-def test_cli_tri_salva_itens_tri(tmp_path):
+def test_cli_tri_salva_itens_tri(tmp_path: Path) -> None:
     cli.main(["tri", "--alunos", "500", "--questoes", "8", "--saida", str(tmp_path)])
     itens = pd.read_csv(tmp_path / "itens_tri.csv", index_col="questao")
     assert itens.columns.tolist() == ["a", "b", "c"]
     assert len(itens) == 8
 
 
-def test_cli_tri_com_csv(tmp_path):
-    cli.main(["tri", "--csv", str(EXEMPLOS / "respostas_exemplo.csv"),
-              "--gabarito", str(EXEMPLOS / "gabarito_exemplo.csv"), "--saida", str(tmp_path)])
+def test_cli_tri_com_csv(tmp_path: Path) -> None:
+    cli.main(
+        [
+            "tri",
+            "--csv",
+            str(EXEMPLOS / "respostas_exemplo.csv"),
+            "--gabarito",
+            str(EXEMPLOS / "gabarito_exemplo.csv"),
+            "--saida",
+            str(tmp_path),
+        ]
+    )
     assert len(pd.read_csv(tmp_path / "itens_tri.csv")) == 6
 
 
 # ---------- validação contra os parâmetros oficiais do INEP ----------
 
-ESCALA_A, ESCALA_B = 1.3, 0.5   # escala "do INEP" no teste: b_inep = 1.3·b + 0.5
+ESCALA_A, ESCALA_B = 1.3, 0.5  # escala "do INEP" no teste: b_inep = 1.3·b + 0.5
 
 
 @pytest.fixture(scope="module")
-def enem_sintetico(tmp_path_factory):
+def enem_sintetico(tmp_path_factory: pytest.TempPathFactory) -> EnemSintetico:
     """Microdados + ITENS_PROVA no formato do INEP, com parâmetros verdadeiros conhecidos."""
     pasta = tmp_path_factory.mktemp("enem")
     respostas, parametros, _ = simulacao.simular_prova(n_alunos=2000, n_itens=20, n_problematicas=0, seed=5)
@@ -235,7 +265,7 @@ def enem_sintetico(tmp_path_factory):
     return microdados, itens, parametros
 
 
-def test_carregar_itens_inep_ordena_por_posicao_e_filtra_caderno(enem_sintetico):
+def test_carregar_itens_inep_ordena_por_posicao_e_filtra_caderno(enem_sintetico: EnemSintetico) -> None:
     _, itens, parametros = enem_sintetico
     oficiais = ingestao.carregar_itens_inep(itens, "mt", 1211)
     assert oficiais.index.tolist() == parametros.index.tolist()
@@ -245,13 +275,13 @@ def test_carregar_itens_inep_ordena_por_posicao_e_filtra_caderno(enem_sintetico)
     assert np.isnan(oficiais.loc["q04", "a_inep"])
 
 
-def test_carregar_itens_inep_caderno_inexistente(enem_sintetico):
+def test_carregar_itens_inep_caderno_inexistente(enem_sintetico: EnemSintetico) -> None:
     _, itens, _ = enem_sintetico
     with pytest.raises(ValueError):
         ingestao.carregar_itens_inep(itens, "MT", 9999)
 
 
-def test_comparar_com_inep_recupera_escala(enem_sintetico):
+def test_comparar_com_inep_recupera_escala(enem_sintetico: EnemSintetico) -> None:
     _, itens, parametros = enem_sintetico
     oficiais = ingestao.carregar_itens_inep(itens, "MT", 1211)
     # Estimativas = verdadeiros + ruído: a comparação tem que achar a escala 1.3 / 0.5.
@@ -266,7 +296,7 @@ def test_comparar_com_inep_recupera_escala(enem_sintetico):
     assert (tabela["a_convertido"] - tabela["a_inep"]).abs().max() < 0.1
 
 
-def test_grafico_b_inep_gera_png(enem_sintetico, tmp_path):
+def test_grafico_b_inep_gera_png(enem_sintetico: EnemSintetico, tmp_path: Path) -> None:
     _, itens, parametros = enem_sintetico
     oficiais = ingestao.carregar_itens_inep(itens, "MT", 1211)
     tabela, resumo = tri.comparar_com_inep(parametros[["a", "b", "c"]], oficiais)
@@ -274,7 +304,7 @@ def test_grafico_b_inep_gera_png(enem_sintetico, tmp_path):
     assert png.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
 
 
-def test_cli_tri_enem_com_itens_inep(enem_sintetico, tmp_path):
+def test_cli_tri_enem_com_itens_inep(enem_sintetico: EnemSintetico, tmp_path: Path) -> None:
     microdados, itens, _ = enem_sintetico
     cli.main(["tri", "--enem", str(microdados), "--itens", str(itens), "--alunos", "0", "--saida", str(tmp_path)])
     validacao = pd.read_csv(tmp_path / "validacao_inep.csv", index_col="questao")
@@ -285,14 +315,15 @@ def test_cli_tri_enem_com_itens_inep(enem_sintetico, tmp_path):
     assert (tmp_path / "b_vs_inep.png").exists()
 
 
-def test_cli_tri_itens_sem_enem_falha(tmp_path):
+def test_cli_tri_itens_sem_enem_falha(tmp_path: Path) -> None:
     with pytest.raises(SystemExit):
         cli.main(["tri", "--itens", "x.csv", "--saida", str(tmp_path)])
 
 
 # ---------- app (Streamlit) ----------
 
-def _app_simulado(alunos: int, questoes: int):
+
+def _app_simulado(alunos: int, questoes: int) -> AppTest:
     from streamlit.testing.v1 import AppTest
 
     app = AppTest.from_file(str(RAIZ / "app.py"), default_timeout=120).run()
@@ -301,7 +332,7 @@ def _app_simulado(alunos: int, questoes: int):
     return app.button(key="usar_simulada").click().run()
 
 
-def test_app_sem_dados_pede_a_prova():
+def test_app_sem_dados_pede_a_prova() -> None:
     from streamlit.testing.v1 import AppTest
 
     app = AppTest.from_file(str(RAIZ / "app.py"), default_timeout=60).run()
@@ -309,7 +340,7 @@ def test_app_sem_dados_pede_a_prova():
     assert "Usar prova simulada" in app.info[0].value
 
 
-def test_app_com_prova_simulada():
+def test_app_com_prova_simulada() -> None:
     app = _app_simulado(alunos=600, questoes=10)
     assert not app.exception
     assert app.metric[0].value == "600 × 10"
@@ -319,7 +350,7 @@ def test_app_com_prova_simulada():
     assert int(app.metric[3].value) >= 2
 
 
-def test_app_troca_a_questao_da_curva():
+def test_app_troca_a_questao_da_curva() -> None:
     app = _app_simulado(alunos=600, questoes=10)
     app.selectbox[0].select("q05").run()
     assert not app.exception

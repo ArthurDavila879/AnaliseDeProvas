@@ -1,4 +1,5 @@
 """Classificação das questões e da prova + saída dos resultados."""
+
 from __future__ import annotations
 
 import json
@@ -78,7 +79,7 @@ def resumir_prova(respostas: pd.DataFrame, itens: pd.DataFrame, confiab: float) 
     total = respostas.sum(axis=1)
     p_media = float(itens["dificuldade"].mean())
     return {
-        "n_alunos": int(len(respostas)),
+        "n_alunos": len(respostas),
         "n_questoes": int(respostas.shape[1]),
         "acerto_medio": round(p_media, 4),
         "nivel_prova": nivel_questao(p_media),
@@ -106,6 +107,7 @@ def grafico_b_inep(tabela: pd.DataFrame, resumo: dict, caminho: str | Path, n_ro
     Rotula só os itens mais distantes da reta (e os de discriminação negativa).
     """
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
@@ -118,16 +120,29 @@ def grafico_b_inep(tabela: pd.DataFrame, resumo: dict, caminho: str | Path, n_ro
 
     x = np.linspace(v["b"].min(), v["b"].max(), 2)
     ax.plot(x, resumo["escala_A"] * x + resumo["escala_B"], color=tinta_2, lw=1.5, ls="--", zorder=2)
-    ax.annotate(f"b_inep = {resumo['escala_A']:.2f}·b {resumo['escala_B']:+.2f}", (x[1], resumo["escala_A"] * x[1] + resumo["escala_B"]),
-                textcoords="offset points", xytext=(-4, 8), ha="right", color=tinta_2, fontsize=9)
+    ax.annotate(
+        f"b_inep = {resumo['escala_A']:.2f}·b {resumo['escala_B']:+.2f}",
+        (x[1], resumo["escala_A"] * x[1] + resumo["escala_B"]),
+        textcoords="offset points",
+        xytext=(-4, 8),
+        ha="right",
+        color=tinta_2,
+        fontsize=9,
+    )
 
     destaque = set(v["dif_b"].abs().nlargest(n_rotulos).index) | set(v.index[v["a"] < 0])
     for q in destaque:
-        ax.annotate(q, (v.at[q, "b"], v.at[q, "b_inep"]), textcoords="offset points", xytext=(6, -3), color=tinta, fontsize=9)
+        ax.annotate(
+            q, (v.at[q, "b"], v.at[q, "b_inep"]), textcoords="offset points", xytext=(6, -3), color=tinta, fontsize=9
+        )
 
-    ax.set_title(f"Dificuldade (b): estimada vs. oficial do INEP\nPearson {resumo['pearson_b']:.3f} · "
-                 f"Spearman {resumo['spearman_b']:.3f} · {resumo['n_comparados']} itens",
-                 loc="left", color=tinta, fontsize=11)
+    ax.set_title(
+        f"Dificuldade (b): estimada vs. oficial do INEP\nPearson {resumo['pearson_b']:.3f} · "
+        f"Spearman {resumo['spearman_b']:.3f} · {resumo['n_comparados']} itens",
+        loc="left",
+        color=tinta,
+        fontsize=11,
+    )
     ax.set_xlabel("b estimado (src/tri.py, escala da amostra)", color=tinta_2)
     ax.set_ylabel("b oficial (ITENS_PROVA)", color=tinta_2)
     ax.grid(color="#e4e3df", lw=0.8, zorder=0)

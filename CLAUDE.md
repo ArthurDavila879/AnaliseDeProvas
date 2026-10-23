@@ -20,6 +20,8 @@ app.py             # Streamlit + plotly: só interface; toda a análise vem de s
 tests/test_analise.py   # pytest, agrupado por módulo (ingestão, métricas, classificação, simulação, TRI)
 exemplos/          # prova de 12 alunos × 6 questões; a q6 é ruim de propósito
 data/              # microdados do ENEM (fora do git, montado no Docker)
+pyproject.toml     # configuração do ruff (lint + formatação) e do pytest
+.github/workflows/ci.yml  # CI: ruff check, ruff format --check e pytest em todo push
 saida/             # itens.csv, prova.json, validacao_simulacao.csv, itens_tri.csv, validacao_inep.csv, b_vs_inep.png (fora do git)
 ```
 
@@ -35,6 +37,8 @@ docker compose run --rm testes             # pytest -v
 docker compose run --rm analise simular
 docker compose run --rm analise csv exemplos/respostas_exemplo.csv --gabarito exemplos/gabarito_exemplo.csv
 docker compose run --rm analise enem data/MICRODADOS_ENEM_2023.csv --area MT --alunos 10000
+docker compose run --rm lint               # ruff check + ruff format --check (lê o código do disco, sem build)
+docker compose run --rm --entrypoint ruff lint format .   # aplica a formatação
 docker compose up -d app                   # app web em http://localhost:8501 (docker compose down para parar)
 ```
 
@@ -46,6 +50,7 @@ Só `data/` e `saida/` são volumes. O resto vem da imagem, então sem `build` o
 python -m venv .venv && .venv\Scripts\activate    # Linux/macOS: source .venv/bin/activate
 pip install -r requirements.txt
 python -m pytest
+ruff check . && ruff format .
 python -m src.cli simular
 ```
 
@@ -57,6 +62,8 @@ No terminal do Windows, defina `PYTHONIOENCODING=utf-8`, senão o `imprimir` que
 - **Formato padrão = matriz 0/1 alunos × questões**: `DataFrame` com uma linha por aluno e uma coluna por questão, valores `0` (erro/branco/dupla marcação) ou `1` (acerto), `dtype int8`. Toda fonte de dados é convertida para esse formato em `ingestao.py` ou `simulacao.py`, e todo o resto (`classica`, `relatorio`) recebe só a matriz. Colunas geradas seguem `q01, q02, ...`. Métricas por questão devolvem `pd.Series` indexada pela questão e com `name` definido.
 - **Toda função nova tem teste em pytest** em `tests/`, na seção do módulo correspondente. Use dados pequenos montados à mão, com resultado conhecido, e `simulacao.simular_prova(seed=...)` quando o teste for estatístico.
 - Estilo: `from __future__ import annotations`, type hints, docstring curta explicando *o que a métrica significa*, constantes com referência (ex.: `FRACAO_GRUPO = 0.27  # Kelley, 1939`).
+- **Lint e formatação: ruff** (config em `pyproject.toml`, linha de 120). Rode `docker compose run --rm lint` antes de commitar: o CI (`.github/workflows/ci.yml`) falha se `ruff check`, `ruff format --check` ou o pytest falharem. Regras ignoradas de propósito, com o motivo, ficam comentadas no `pyproject.toml`; não adicione `# noqa` sem explicar.
+- **Type hints em toda função**, inclusive testes e funções internas (regra `ANN` do ruff). Nos testes, fixtures com tupla têm alias (`ProvaTri`, `EnemSintetico`).
 - Erros de entrada viram `ValueError` com mensagem clara em português.
 
 ## Cuidados

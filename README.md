@@ -41,9 +41,12 @@ docker compose run --rm analise tri --enem data/MICRODADOS_ENEM_2023.csv --itens
 # App web (upload de CSV ou prova simulada, gráficos e relatório para baixar)
 docker compose up -d app       # abra http://localhost:8501 · para parar: docker compose down
 
-# Testes
+# Testes e lint (ruff)
 docker compose run --rm testes
+docker compose run --rm lint
 ```
+
+O GitHub Actions (`.github/workflows/ci.yml`) roda `ruff check`, `ruff format --check` e o pytest em todo push.
 
 Os resultados vão para `saida/`: `itens.csv` (métricas por questão), `prova.json` (resumo) e, no comando `tri`, `itens_tri.csv` (a, b, c).
 

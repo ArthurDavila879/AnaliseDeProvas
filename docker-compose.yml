@@ -25,3 +25,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  lint:
+    image: analise-provas
+    build: .
+    volumes:
+      - .:/app                # lê o código do disco, não da imagem: não precisa de build a cada mudança
+    entrypoint: ["sh", "-c", "ruff check . && ruff format --check ."]
+    command: []

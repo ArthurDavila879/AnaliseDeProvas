@@ -18,6 +18,7 @@ quem sabe mais erra mais.
 Habilidade dos alunos: EAP (média da posterior), que existe mesmo para quem
 acertou ou errou tudo, ao contrário da máxima verossimilhança.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -26,13 +27,13 @@ from scipy import optimize, stats
 
 from .simulacao import D, prob_acerto
 
-N_PONTOS = 41                  # pontos da quadratura em θ
+N_PONTOS = 41  # pontos da quadratura em θ
 LIMITES_THETA = (-4.0, 4.0)
 LIMITES_A = (-4.0, 4.0)
 LIMITES_B = (-5.0, 5.0)
 LIMITES_C = (1e-4, 0.5)
 PRIOR_B_DESVIO = 2.0
-PRIOR_C = (5.0, 17.0)          # Beta(alfa, beta)
+PRIOR_C = (5.0, 17.0)  # Beta(alfa, beta)
 EPS = 1e-9
 
 
@@ -43,8 +44,9 @@ def _quadratura(n_pontos: int = N_PONTOS) -> tuple[np.ndarray, np.ndarray]:
     return nos, pesos / pesos.sum()
 
 
-def _posterior(x: np.ndarray, a: np.ndarray, b: np.ndarray, c: np.ndarray,
-               nos: np.ndarray, pesos: np.ndarray) -> tuple[np.ndarray, np.ndarray, float]:
+def _posterior(
+    x: np.ndarray, a: np.ndarray, b: np.ndarray, c: np.ndarray, nos: np.ndarray, pesos: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, float]:
     """Posterior de cada aluno na grade de θ.
 
     Retorna (posterior alunos × pontos, P pontos × questões, log-verossimilhança marginal).
@@ -63,8 +65,8 @@ def _objetivo(params: np.ndarray, x: np.ndarray, nos: np.ndarray, pesos: np.ndar
     post, p, log_vero = _posterior(x, a, b, c, nos, pesos)
 
     # Contagens esperadas em cada ponto da grade: alunos (n) e acertos (r) por questão.
-    n = post.sum(axis=0)[:, None]                     # pontos × 1
-    r = post.T @ x                                    # pontos × questões
+    n = post.sum(axis=0)[:, None]  # pontos × 1
+    r = post.T @ x  # pontos × questões
     dl_dp = r / p - (n - r) / (1 - p)
 
     sig = (p - c) / (1 - c)
@@ -74,8 +76,7 @@ def _objetivo(params: np.ndarray, x: np.ndarray, nos: np.ndarray, pesos: np.ndar
     grad_b = (dl_dp * -base * a).sum(axis=0) - b / PRIOR_B_DESVIO**2
     grad_c = (dl_dp * (1 - sig)).sum(axis=0) + (PRIOR_C[0] - 1) / c - (PRIOR_C[1] - 1) / (1 - c)
 
-    log_prior = (stats.norm.logpdf(b, 0, PRIOR_B_DESVIO).sum()
-                 + stats.beta.logpdf(c, *PRIOR_C).sum())
+    log_prior = stats.norm.logpdf(b, 0, PRIOR_B_DESVIO).sum() + stats.beta.logpdf(c, *PRIOR_C).sum()
     return -(log_vero + log_prior), -np.concatenate([grad_a, grad_b, grad_c])
 
 
@@ -83,8 +84,9 @@ def _valores_iniciais(x: np.ndarray) -> np.ndarray:
     """Chute inicial a partir da teoria clássica (sinal da correlação e % de acerto)."""
     p = x.mean(axis=0).clip(0.05, 0.95)
     total = x.sum(axis=1)
-    sinal = np.array([np.sign(np.corrcoef(x[:, j], total - x[:, j])[0, 1]) if x[:, j].std() > 0 else 1.0
-                      for j in range(x.shape[1])])
+    sinal = np.array(
+        [np.sign(np.corrcoef(x[:, j], total - x[:, j])[0, 1]) if x[:, j].std() > 0 else 1.0 for j in range(x.shape[1])]
+    )
     sinal[sinal == 0] = 1.0
     c = np.full(x.shape[1], 0.2)
     p_sem_chute = ((p - c) / (1 - c)).clip(0.05, 0.95)
@@ -104,8 +106,13 @@ def estimar_itens(respostas: pd.DataFrame, max_iter: int = 500) -> pd.DataFrame:
     k = x.shape[1]
     limites = [LIMITES_A] * k + [LIMITES_B] * k + [LIMITES_C] * k
     resultado = optimize.minimize(
-        _objetivo, _valores_iniciais(x), args=(x, nos, pesos), jac=True,
-        method="L-BFGS-B", bounds=limites, options={"maxiter": max_iter},
+        _objetivo,
+        _valores_iniciais(x),
+        args=(x, nos, pesos),
+        jac=True,
+        method="L-BFGS-B",
+        bounds=limites,
+        options={"maxiter": max_iter},
     )
     a, b, c = np.split(resultado.x, 3)
     tabela = pd.DataFrame({"a": a, "b": b, "c": c}, index=pd.Index(respostas.columns, name="questao"))
@@ -174,9 +181,13 @@ def comparar_com_inep(estimados: pd.DataFrame, oficiais: pd.DataFrame) -> tuple[
     tabela["a_convertido"] = tabela["a"] / escala_a
     tabela["dif_b"] = tabela["b_convertido"] - tabela["b_inep"]
 
-    resumo = {"n_itens": int(len(tabela)), "n_comparados": int(validos.sum()),
-              "anulados": tabela.index[tabela["anulado"]].tolist(),
-              "escala_A": round(escala_a, 4), "escala_B": round(escala_b, 4)}
+    resumo = {
+        "n_itens": len(tabela),
+        "n_comparados": int(validos.sum()),
+        "anulados": tabela.index[tabela["anulado"]].tolist(),
+        "escala_A": round(escala_a, 4),
+        "escala_B": round(escala_b, 4),
+    }
     for p in ("a", "b", "c"):
         resumo[f"pearson_{p}"] = round(float(np.corrcoef(v[p], v[f"{p}_inep"])[0, 1]), 4)
         resumo[f"spearman_{p}"] = round(float(stats.spearmanr(v[p], v[f"{p}_inep"]).statistic), 4)

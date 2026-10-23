@@ -2,6 +2,7 @@
 
 Entrada: matriz 0/1 (linhas = alunos, colunas = questões).
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -22,7 +23,7 @@ def discriminacao_grupos(respostas: pd.DataFrame, fracao: float = FRACAO_GRUPO) 
     ideia de "se só os bons acertam, a questão separa bem quem sabe".
     """
     total = respostas.sum(axis=1)
-    n = max(1, int(round(len(respostas) * fracao)))
+    n = max(1, round(len(respostas) * fracao))
     ordem = total.sort_values(kind="mergesort").index
     inferior = respostas.loc[ordem[:n]]
     superior = respostas.loc[ordem[-n:]]

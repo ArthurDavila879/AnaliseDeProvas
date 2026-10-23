@@ -4,6 +4,7 @@ Formato padrão usado no resto do projeto:
     DataFrame com uma linha por aluno e uma coluna por questão,
     valores 0 (errou/branco) ou 1 (acertou).
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -116,20 +117,30 @@ def carregar_itens_inep(caminho: str | Path, area: str, co_prova: int) -> pd.Dat
     if itens.empty:
         raise ValueError(f"Caderno {co_prova} de {area} não encontrado em {caminho}.")
 
-    numero = lambda col: pd.to_numeric(itens[col].str.replace(",", ".", regex=False), errors="coerce")
-    tabela = pd.DataFrame({
-        "co_posicao": numero("CO_POSICAO").astype(int),
-        "co_item": itens["CO_ITEM"],
-        "a_inep": numero("NU_PARAM_A"),
-        "b_inep": numero("NU_PARAM_B"),
-        "c_inep": numero("NU_PARAM_C"),
-        "anulado": numero("IN_ITEM_ABAN").fillna(0).astype(int).eq(1),
-    }).sort_values("co_posicao").drop_duplicates("co_posicao")
+    def numero(col: str) -> pd.Series:
+        return pd.to_numeric(itens[col].str.replace(",", ".", regex=False), errors="coerce")
+
+    tabela = (
+        pd.DataFrame(
+            {
+                "co_posicao": numero("CO_POSICAO").astype(int),
+                "co_item": itens["CO_ITEM"],
+                "a_inep": numero("NU_PARAM_A"),
+                "b_inep": numero("NU_PARAM_B"),
+                "c_inep": numero("NU_PARAM_C"),
+                "anulado": numero("IN_ITEM_ABAN").fillna(0).astype(int).eq(1),
+            }
+        )
+        .sort_values("co_posicao")
+        .drop_duplicates("co_posicao")
+    )
     tabela.index = pd.Index([f"q{i + 1:02d}" for i in range(len(tabela))], name="questao")
     return tabela
 
 
-def carregar_csv(caminho_respostas: str | Path | BinaryIO, caminho_gabarito: str | Path | BinaryIO | None = None) -> pd.DataFrame:
+def carregar_csv(
+    caminho_respostas: str | Path | BinaryIO, caminho_gabarito: str | Path | BinaryIO | None = None
+) -> pd.DataFrame:
     """Lê uma prova no formato simples (para uso de professor).
 
     respostas.csv: coluna `aluno` + uma coluna por questão.

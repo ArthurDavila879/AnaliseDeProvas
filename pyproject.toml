@@ -1,0 +1,30 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes
+    "I",        # ordem dos imports
+    "UP",       # sintaxe moderna (pyupgrade)
+    "B",        # bugbear: armadilhas comuns
+    "SIM",      # simplificações
+    "C4",       # comprehensions
+    "NPY",      # numpy
+    "PD",       # pandas
+    "ANN",      # type hints obrigatórios
+    "RUF",
+]
+ignore = [
+    "E501",     # o formatador cuida do comprimento; sobra só string/comentário longo
+    "RUF001", "RUF002", "RUF003",  # θ, ×, → etc. são intencionais (textos em português)
+    "C408",     # dict(color=..., width=...) é o idioma do plotly e lê melhor que o literal
+    "PD008",    # .at é o acesso certo para um valor escalar
+]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
