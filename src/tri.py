@@ -35,6 +35,7 @@ LIMITES_C = (1e-4, 0.5)
 PRIOR_B_DESVIO = 2.0
 PRIOR_C = (5.0, 17.0)  # Beta(alfa, beta)
 EPS = 1e-9
+MAX_ITERACOES = 2_000  # L-BFGS-B; CN/ENEM 2023 (45 itens) precisou de 781, e 500 parava antes
 
 
 def _quadratura(n_pontos: int = N_PONTOS) -> tuple[np.ndarray, np.ndarray]:
@@ -94,7 +95,7 @@ def _valores_iniciais(x: np.ndarray) -> np.ndarray:
     return np.concatenate([sinal, b, c])
 
 
-def estimar_itens(respostas: pd.DataFrame, max_iter: int = 500) -> pd.DataFrame:
+def estimar_itens(respostas: pd.DataFrame, max_iter: int = MAX_ITERACOES) -> pd.DataFrame:
     """Estima a, b e c de cada questão por máxima verossimilhança marginal.
 
     Retorna DataFrame indexado pela questão com colunas a, b, c.
