@@ -1,0 +1,7 @@
+data/
+saida/
+.git/
+__pycache__/
+.pytest_cache/
+*.pyc
+.venv/

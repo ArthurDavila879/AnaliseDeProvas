@@ -1,0 +1,13 @@
+services:
+  analise:
+    build: .
+    image: analise-provas
+    volumes:
+      - ./data:/app/data      # coloque aqui o CSV dos microdados do ENEM
+      - ./saida:/app/saida    # resultados (itens.csv, prova.json)
+
+  testes:
+    image: analise-provas
+    build: .
+    entrypoint: ["python", "-m", "pytest", "-v"]
+    command: []

@@ -1,0 +1,7 @@
+data/
+saida/
+__pycache__/
+.pytest_cache/
+*.pyc
+.venv/
+.ipynb_checkpoints/
