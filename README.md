@@ -2,7 +2,7 @@
 
 Mede o **nível de cada questão** e o **nível da prova** a partir das respostas dos alunos, usando a Teoria Clássica dos Testes. Funciona com uma prova simulada, com os microdados do ENEM ou com a prova de um professor em CSV.
 
-> Fases 1 e 2 do projeto (ingestão + teoria clássica). Próximas: TRI (3PL) validada contra os parâmetros oficiais do INEP e app Streamlit.
+> Fases 1 a 3 do projeto (ingestão, teoria clássica e TRI 3PL). Próximas: validar a TRI contra os parâmetros oficiais do INEP e app Streamlit.
 
 ## O que é calculado
 
@@ -30,11 +30,19 @@ docker compose run --rm analise simular
 # Prova de exemplo em CSV (12 alunos, 6 questões, a q6 tem problema de propósito)
 docker compose run --rm analise csv exemplos/respostas_exemplo.csv --gabarito exemplos/gabarito_exemplo.csv
 
+# TRI (3PL): estima a, b, c de cada questão e θ de cada aluno
+docker compose run --rm analise tri                       # prova simulada, compara com os parâmetros verdadeiros
+docker compose run --rm analise tri --csv exemplos/respostas_exemplo.csv --gabarito exemplos/gabarito_exemplo.csv
+docker compose run --rm analise tri --enem data/MICRODADOS_ENEM_2023.csv --area MT --alunos 10000
+
+# TRI no ENEM + comparação com os parâmetros oficiais do INEP (ITENS_PROVA_AAAA.csv, também em DADOS/ do zip)
+docker compose run --rm analise tri --enem data/MICRODADOS_ENEM_2023.csv --itens data/ITENS_PROVA_2023.csv --area MT
+
 # Testes
 docker compose run --rm testes
 ```
 
-Os resultados vão para `saida/`: `itens.csv` (métricas por questão) e `prova.json` (resumo).
+Os resultados vão para `saida/`: `itens.csv` (métricas por questão), `prova.json` (resumo) e, no comando `tri`, `itens_tri.csv` (a, b, c).
 
 ### Com os microdados do ENEM
 
@@ -89,6 +97,18 @@ O comando `simular` gera respostas pelo modelo TRI de 3 parâmetros, com habilid
 - Questões defeituosas detectadas: **2 de 2**
 - A correlação entre discriminação TRI (a) e o índice D é mais fraca (~0,4), porque o D também depende da dificuldade: questões muito fáceis ou muito difíceis têm D baixo mesmo discriminando bem. Essa é uma das limitações da teoria clássica que a TRI resolve.
 
+## TRI (3PL)
+
+`src/tri.py` estima o modelo de 3 parâmetros (D = 1,7) por máxima verossimilhança marginal, o mesmo método do BILOG usado pelo INEP: θ ~ N(0, 1) integrado por quadratura, otimização L-BFGS-B com gradiente analítico e priors fracos em b (N(0, 2)) e c (Beta(5, 17)). A habilidade dos alunos sai por EAP, com erro padrão.
+
+Recuperação na prova simulada (2000 alunos, 30 questões, seed padrão): correlação **0,91** em a, **0,997** em b, **0,69** em c e **0,94** em θ, e as 2 questões defeituosas saem com a < 0. O c é sempre o mais difícil de estimar; com 10000 alunos e 45 questões as correlações sobem para 0,98 / 0,998 / 0,84. Com poucos alunos (como na prova de exemplo), o 3PL fica instável e o programa avisa.
+
+### Validação contra o INEP
+
+Com `--itens`, os parâmetros estimados são comparados com os oficiais do `ITENS_PROVA_AAAA.csv`: o item na posição k do caderno (ordem de `CO_POSICAO`) é a questão `qk`. Itens anulados ficam de fora. Como o INEP calibra numa escala de referência própria, o que importa é a **correlação** (Pearson e Spearman). A conversão para a escala do INEP é feita pelo método média-desvio (`b_inep ≈ A·b + B`, `a_inep ≈ a / A`). Saída: `saida/validacao_inep.csv` e `saida/b_vs_inep.png`.
+
+A lib `girth` foi testada, mas não funciona com o numpy 2 / scipy atuais (último release em 2021).
+
 ## Estrutura
 
 ```
@@ -96,8 +116,9 @@ src/
 ├── ingestao.py    # ENEM e CSV → matriz 0/1 (alunos × questões)
 ├── simulacao.py   # gerador de provas pelo modelo 3PL
 ├── classica.py    # dificuldade, discriminação, bisserial, KR-20
+├── tri.py         # 3PL: a, b, c por MML e θ por EAP
 ├── relatorio.py   # classificação, alertas, saída
-└── cli.py         # comandos simular | enem | csv
+└── cli.py         # comandos simular | enem | csv | tri
 tests/             # pytest
 exemplos/          # prova pequena de exemplo
 ```

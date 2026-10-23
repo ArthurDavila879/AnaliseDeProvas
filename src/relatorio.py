@@ -100,6 +100,51 @@ def salvar(itens: pd.DataFrame, resumo: dict, pasta: str | Path) -> Path:
     return pasta
 
 
+def grafico_b_inep(tabela: pd.DataFrame, resumo: dict, caminho: str | Path, n_rotulos: int = 4) -> Path:
+    """Dispersão do b estimado vs. b oficial do INEP, com a reta média-desvio.
+
+    Rotula só os itens mais distantes da reta (e os de discriminação negativa).
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    tinta, tinta_2, fundo, serie = "#0b0b0b", "#52514e", "#fcfcfb", "#2a78d6"
+    v = tabela[~tabela["anulado"] & tabela["b_inep"].notna()]
+
+    fig, ax = plt.subplots(figsize=(7, 5.5), dpi=150, facecolor=fundo)
+    ax.set_facecolor(fundo)
+    ax.scatter(v["b"], v["b_inep"], s=55, color=serie, edgecolors=fundo, linewidths=1.5, zorder=3)
+
+    x = np.linspace(v["b"].min(), v["b"].max(), 2)
+    ax.plot(x, resumo["escala_A"] * x + resumo["escala_B"], color=tinta_2, lw=1.5, ls="--", zorder=2)
+    ax.annotate(f"b_inep = {resumo['escala_A']:.2f}·b {resumo['escala_B']:+.2f}", (x[1], resumo["escala_A"] * x[1] + resumo["escala_B"]),
+                textcoords="offset points", xytext=(-4, 8), ha="right", color=tinta_2, fontsize=9)
+
+    destaque = set(v["dif_b"].abs().nlargest(n_rotulos).index) | set(v.index[v["a"] < 0])
+    for q in destaque:
+        ax.annotate(q, (v.at[q, "b"], v.at[q, "b_inep"]), textcoords="offset points", xytext=(6, -3), color=tinta, fontsize=9)
+
+    ax.set_title(f"Dificuldade (b): estimada vs. oficial do INEP\nPearson {resumo['pearson_b']:.3f} · "
+                 f"Spearman {resumo['spearman_b']:.3f} · {resumo['n_comparados']} itens",
+                 loc="left", color=tinta, fontsize=11)
+    ax.set_xlabel("b estimado (src/tri.py, escala da amostra)", color=tinta_2)
+    ax.set_ylabel("b oficial (ITENS_PROVA)", color=tinta_2)
+    ax.grid(color="#e4e3df", lw=0.8, zorder=0)
+    ax.tick_params(colors=tinta_2)
+    for lado in ("top", "right"):
+        ax.spines[lado].set_visible(False)
+    for lado in ("left", "bottom"):
+        ax.spines[lado].set_color("#c9c8c2")
+
+    caminho = Path(caminho)
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    fig.tight_layout()
+    fig.savefig(caminho, facecolor=fundo)
+    plt.close(fig)
+    return caminho
+
+
 def imprimir(itens: pd.DataFrame, resumo: dict) -> None:
     print("\n=== PROVA ===")
     print(f"Alunos: {resumo['n_alunos']} | Questões: {resumo['n_questoes']}")

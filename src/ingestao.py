@@ -99,6 +99,35 @@ def carregar_enem(
     return matriz.reset_index(drop=True), nota.reset_index(drop=True), co_prova
 
 
+def carregar_itens_inep(caminho: str | Path, area: str, co_prova: int) -> pd.DataFrame:
+    """Lê o ITENS_PROVA_AAAA.csv e devolve os parâmetros oficiais de um caderno.
+
+    A string TX_RESPOSTAS segue a ordem de CO_POSICAO, então o k-ésimo item do
+    caderno (por posição) é a coluna q{k} da matriz de acertos.
+    Itens anulados (IN_ITEM_ABAN = 1) vêm marcados e sem parâmetros.
+
+    Retorna DataFrame indexado pela questão com a_inep, b_inep, c_inep,
+    co_posicao, co_item e anulado.
+    """
+    area = area.upper()
+    itens = pd.read_csv(caminho, sep=";", encoding="latin-1", dtype=str)
+    itens = itens[(itens["SG_AREA"] == area) & (pd.to_numeric(itens["CO_PROVA"], errors="coerce") == co_prova)]
+    if itens.empty:
+        raise ValueError(f"Caderno {co_prova} de {area} não encontrado em {caminho}.")
+
+    numero = lambda col: pd.to_numeric(itens[col].str.replace(",", ".", regex=False), errors="coerce")
+    tabela = pd.DataFrame({
+        "co_posicao": numero("CO_POSICAO").astype(int),
+        "co_item": itens["CO_ITEM"],
+        "a_inep": numero("NU_PARAM_A"),
+        "b_inep": numero("NU_PARAM_B"),
+        "c_inep": numero("NU_PARAM_C"),
+        "anulado": numero("IN_ITEM_ABAN").fillna(0).astype(int).eq(1),
+    }).sort_values("co_posicao").drop_duplicates("co_posicao")
+    tabela.index = pd.Index([f"q{i + 1:02d}" for i in range(len(tabela))], name="questao")
+    return tabela
+
+
 def carregar_csv(caminho_respostas: str | Path, caminho_gabarito: str | Path | None = None) -> pd.DataFrame:
     """Lê uma prova no formato simples (para uso de professor).
 

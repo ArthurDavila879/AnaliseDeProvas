@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src import classica, ingestao, relatorio, simulacao
+from src import classica, cli, ingestao, relatorio, simulacao, tri
 
 EXEMPLOS = Path(__file__).resolve().parent.parent / "exemplos"
 
@@ -106,3 +106,151 @@ def test_metricas_recuperam_parametros_simulados():
     assert itens.loc[problematicas, "alertas"].str.contains("revisar").all()
 
     assert 0.6 < confiab < 1.0
+
+
+# ---------- TRI (3PL) ----------
+
+@pytest.fixture(scope="module")
+def prova_tri():
+    respostas, parametros, theta = simulacao.simular_prova(n_alunos=3000, n_itens=25, n_problematicas=2, seed=11)
+    itens, alunos = tri.ajustar_3pl(respostas)
+    return respostas, parametros, theta, itens, alunos
+
+
+def test_tri_recupera_parametros_simulados(prova_tri):
+    _, parametros, _, itens, _ = prova_tri
+    assert itens.attrs["convergiu"]
+    normais = ~parametros["problematica"]
+    assert np.corrcoef(parametros.loc[normais, "b"], itens.loc[normais, "b"])[0, 1] > 0.95
+    assert np.corrcoef(parametros.loc[normais, "a"], itens.loc[normais, "a"])[0, 1] > 0.8
+    # c é o parâmetro mais difícil de identificar: basta ficar perto do verdadeiro.
+    assert (parametros.loc[normais, "c"] - itens.loc[normais, "c"]).abs().mean() < 0.08
+
+
+def test_tri_discriminacao_negativa_nas_problematicas(prova_tri):
+    _, parametros, _, itens, _ = prova_tri
+    assert (itens.loc[parametros["problematica"], "a"] < 0).all()
+
+
+def test_tri_theta_correlaciona_com_verdadeiro(prova_tri):
+    respostas, _, theta, _, alunos = prova_tri
+    assert alunos.shape == (len(respostas), 2)
+    assert np.corrcoef(theta, alunos["theta"])[0, 1] > 0.9
+    assert (alunos["erro_padrao"] > 0).all()
+
+
+def test_tri_theta_ordena_pelo_numero_de_acertos():
+    # Itens iguais: θ só depende do total de acertos, e precisa crescer com ele.
+    itens = pd.DataFrame({"a": [1.0] * 4, "b": [0.0] * 4, "c": [0.2] * 4}, index=[f"q{i}" for i in range(4)])
+    respostas = pd.DataFrame([[0, 0, 0, 0], [1, 0, 0, 0], [1, 1, 0, 0], [1, 1, 1, 0], [1, 1, 1, 1]], columns=itens.index)
+    theta = tri.estimar_theta(respostas, itens)["theta"]
+    assert theta.is_monotonic_increasing and theta.iloc[0] < 0 < theta.iloc[-1]
+
+
+def test_tri_exige_duas_questoes():
+    with pytest.raises(ValueError):
+        tri.estimar_itens(pd.DataFrame({"q1": [0, 1, 1]}))
+
+
+def test_cli_tri_salva_itens_tri(tmp_path):
+    cli.main(["tri", "--alunos", "500", "--questoes", "8", "--saida", str(tmp_path)])
+    itens = pd.read_csv(tmp_path / "itens_tri.csv", index_col="questao")
+    assert itens.columns.tolist() == ["a", "b", "c"]
+    assert len(itens) == 8
+
+
+def test_cli_tri_com_csv(tmp_path):
+    cli.main(["tri", "--csv", str(EXEMPLOS / "respostas_exemplo.csv"),
+              "--gabarito", str(EXEMPLOS / "gabarito_exemplo.csv"), "--saida", str(tmp_path)])
+    assert len(pd.read_csv(tmp_path / "itens_tri.csv")) == 6
+
+
+# ---------- validação contra os parâmetros oficiais do INEP ----------
+
+ESCALA_A, ESCALA_B = 1.3, 0.5   # escala "do INEP" no teste: b_inep = 1.3·b + 0.5
+
+
+@pytest.fixture(scope="module")
+def enem_sintetico(tmp_path_factory):
+    """Microdados + ITENS_PROVA no formato do INEP, com parâmetros verdadeiros conhecidos."""
+    pasta = tmp_path_factory.mktemp("enem")
+    respostas, parametros, _ = simulacao.simular_prova(n_alunos=2000, n_itens=20, n_problematicas=0, seed=5)
+    k = respostas.shape[1]
+
+    gabarito = "A" * k
+    linhas = ["NU_INSCRICAO;CO_PROVA_MT;TP_PRESENCA_MT;TX_RESPOSTAS_MT;TX_GABARITO_MT;NU_NOTA_MT"]
+    for i, acertos in enumerate(respostas.to_numpy()):
+        texto = "".join("A" if x else "B" for x in acertos)
+        linhas.append(f"{i};1211;1;{texto};{gabarito};{500 + 10 * acertos.sum()}")
+    microdados = pasta / "MICRODADOS_ENEM_2099.csv"
+    microdados.write_text("\n".join(linhas), encoding="latin-1")
+
+    rng = np.random.default_rng(0)
+    cab = "CO_POSICAO;SG_AREA;CO_ITEM;TX_GABARITO;IN_ITEM_ABAN;NU_PARAM_A;NU_PARAM_B;NU_PARAM_C;CO_PROVA"
+    linhas = [cab]
+    for j in rng.permutation(k):  # fora de ordem de propósito
+        a, b, c = parametros.iloc[j][["a", "b", "c"]]
+        anulado = j == 3
+        par = ";;" if anulado else f"{a / ESCALA_A:.5f};{ESCALA_A * b + ESCALA_B:.5f};{c:.5f}"
+        linhas.append(f"{136 + j};MT;{9000 + j};A;{int(anulado)};{par};1211")
+    for j in range(k):  # outro caderno, que não pode ser misturado
+        linhas.append(f"{136 + j};MT;{7000 + j};B;0;9.0;9.0;0.5;1212")
+    linhas.append("46;CH;1;C;0;1.0;0.0;0.2;1211")  # outra área, mesmo CO_PROVA
+    itens = pasta / "ITENS_PROVA_2099.csv"
+    itens.write_text("\n".join(linhas), encoding="latin-1")
+    return microdados, itens, parametros
+
+
+def test_carregar_itens_inep_ordena_por_posicao_e_filtra_caderno(enem_sintetico):
+    _, itens, parametros = enem_sintetico
+    oficiais = ingestao.carregar_itens_inep(itens, "mt", 1211)
+    assert oficiais.index.tolist() == parametros.index.tolist()
+    assert oficiais["co_posicao"].is_monotonic_increasing
+    assert oficiais.loc["q05", "b_inep"] == pytest.approx(ESCALA_A * parametros.loc["q05", "b"] + ESCALA_B, abs=1e-4)
+    assert oficiais["anulado"].tolist() == [q == "q04" for q in oficiais.index]
+    assert np.isnan(oficiais.loc["q04", "a_inep"])
+
+
+def test_carregar_itens_inep_caderno_inexistente(enem_sintetico):
+    _, itens, _ = enem_sintetico
+    with pytest.raises(ValueError):
+        ingestao.carregar_itens_inep(itens, "MT", 9999)
+
+
+def test_comparar_com_inep_recupera_escala(enem_sintetico):
+    _, itens, parametros = enem_sintetico
+    oficiais = ingestao.carregar_itens_inep(itens, "MT", 1211)
+    # Estimativas = verdadeiros + ruído: a comparação tem que achar a escala 1.3 / 0.5.
+    rng = np.random.default_rng(1)
+    estimados = parametros[["a", "b", "c"]] + rng.normal(0, 0.03, (len(parametros), 3))
+    tabela, resumo = tri.comparar_com_inep(estimados, oficiais)
+    assert resumo["n_comparados"] == len(parametros) - 1 and resumo["anulados"] == ["q04"]
+    assert resumo["escala_A"] == pytest.approx(ESCALA_A, rel=0.05)
+    assert resumo["escala_B"] == pytest.approx(ESCALA_B, abs=0.1)
+    assert resumo["pearson_b"] > 0.99 and resumo["spearman_b"] > 0.98
+    assert resumo["rmse_b_convertido"] < 0.1
+    assert (tabela["a_convertido"] - tabela["a_inep"]).abs().max() < 0.1
+
+
+def test_grafico_b_inep_gera_png(enem_sintetico, tmp_path):
+    _, itens, parametros = enem_sintetico
+    oficiais = ingestao.carregar_itens_inep(itens, "MT", 1211)
+    tabela, resumo = tri.comparar_com_inep(parametros[["a", "b", "c"]], oficiais)
+    png = relatorio.grafico_b_inep(tabela, resumo, tmp_path / "sub" / "b.png")
+    assert png.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_cli_tri_enem_com_itens_inep(enem_sintetico, tmp_path):
+    microdados, itens, _ = enem_sintetico
+    cli.main(["tri", "--enem", str(microdados), "--itens", str(itens), "--alunos", "0", "--saida", str(tmp_path)])
+    validacao = pd.read_csv(tmp_path / "validacao_inep.csv", index_col="questao")
+    assert len(validacao) == 20
+    assert {"b", "b_inep", "b_convertido", "dif_b"} <= set(validacao.columns)
+    validos = ~validacao["anulado"]
+    assert np.corrcoef(validacao.loc[validos, "b"], validacao.loc[validos, "b_inep"])[0, 1] > 0.95
+    assert (tmp_path / "b_vs_inep.png").exists()
+
+
+def test_cli_tri_itens_sem_enem_falha(tmp_path):
+    with pytest.raises(SystemExit):
+        cli.main(["tri", "--itens", "x.csv", "--saida", str(tmp_path)])
