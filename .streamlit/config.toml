@@ -5,8 +5,45 @@ maxUploadSize = 20  # MB: uma prova de turma ou escola cabe com folga; protege a
 [browser]
 gatherUsageStats = false
 
-[theme]
-primaryColor = "#2a78d6"
-
 [client]
-toolbarMode = "viewer"  # esconde Deploy/Rerun/Limpar cache de quem visita o app
+toolbarMode = "viewer"  # esconde Deploy/Rerun/Limpar cache; o seletor de tema (menu ⋮) continua
+
+# Identidade: papel de prova, caneta azul, caneta vermelha só para o que precisa de revisão.
+# Com [theme.light] e [theme.dark] definidos, o visitante escolhe Claro / Escuro / Sistema
+# no menu ⋮ (o padrão segue o sistema). app.py lê o tema ativo em st.context.theme.
+[theme]
+# Atkinson Hyperlegible (Braille Institute): feita para legibilidade, dígitos inconfundíveis.
+font = "Atkinson Hyperlegible Next:https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;700;800&display=swap"
+headingFont = "Atkinson Hyperlegible Next:https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;700;800&display=swap"
+headingFontWeights = [800, 700, 700]
+baseFontSize = 16
+baseRadius = "0.4rem"
+showWidgetBorder = true
+
+[theme.light]
+primaryColor = "#2a78d6"             # caneta azul
+backgroundColor = "#f6f7f9"          # papel
+secondaryBackgroundColor = "#ffffff" # folha (campos, tabela)
+textColor = "#1e2430"                # grafite
+linkColor = "#1c5cab"                # azul um passo mais escuro: 4,5:1 sobre o papel
+borderColor = "#dde1e7"
+redColor = "#d03b3b"                 # caneta vermelha
+chartCategoricalColors = ["#2a78d6", "#eb6834", "#1baf7a"]
+
+[theme.light.sidebar]
+backgroundColor = "#eceff3"
+secondaryBackgroundColor = "#ffffff"
+
+[theme.dark]
+primaryColor = "#2a78d6"             # botões: branco sobre este azul tem 4,4:1 (o #3987e5 teria 3,6:1)
+backgroundColor = "#12161c"          # lousa
+secondaryBackgroundColor = "#1b2129"
+textColor = "#e6e9ef"
+linkColor = "#6da7ec"
+borderColor = "#2c333d"
+redColor = "#e66767"
+chartCategoricalColors = ["#3987e5", "#d95926", "#199e70"]
+
+[theme.dark.sidebar]
+backgroundColor = "#171c23"
+secondaryBackgroundColor = "#1f262f"

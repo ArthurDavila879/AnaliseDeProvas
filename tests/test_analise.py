@@ -350,9 +350,52 @@ def test_app_com_prova_simulada() -> None:
     assert len(app.tabs) == 4
     # Duas questões problemáticas por padrão: aparecem no painel de alertas.
     assert int(app.metric[3].value) >= 2
+    # O cartão da prova é renderizado com uma bolha por questão.
+    cartao = app.get("html")[0].proto.body
+    assert cartao.count("<li ") == 10
 
 
 def test_app_troca_a_questao_da_curva() -> None:
     app = _app_simulado(alunos=600, questoes=10)
     app.selectbox[0].select("q05").run()
     assert not app.exception
+
+
+def test_cartao_prova_preenche_pelo_acerto_e_marca_revisao() -> None:
+    import app as pagina
+
+    claro, escuro = pagina.PALETAS["light"], pagina.PALETAS["dark"]
+    tabela = pd.DataFrame(
+        {
+            "dificuldade": [0.0, 1.0, np.nan],
+            "nivel": ["difícil", "fácil", "indefinido"],
+            "alertas": ["", "revisar", ""],
+        },
+        index=["q01", "q02", "q10"],
+    )
+    cartao = pagina.cartao_prova(tabela)
+    # Ninguém acertou: bolha vazia; todos acertaram: bolha cheia. As duas paletas vão juntas (light-dark).
+    assert f"background:light-dark({claro.bolha_vazia}, {escuro.bolha_vazia})" in cartao
+    assert f"background:light-dark({claro.bolha_cheia}, {escuro.bolha_cheia})" in cartao
+    # Só a q02 tem o círculo de revisão, e o motivo vai no texto (não só na cor).
+    assert cartao.count('<li class="revisar"') == 1
+    assert "q02: 100% de acerto, fácil. Revisar: revisar" in cartao
+    assert "q10: sem dados" in cartao
+
+
+@pytest.mark.parametrize(
+    ("questao", "esperado"), [("q07", "7"), ("Q12", "12"), ("questao_10", "10"), ("extra", "extra")]
+)
+def test_rotulo_do_cartao(questao: str, esperado: str) -> None:
+    import app as pagina
+
+    assert pagina._rotulo(questao) == esperado
+
+
+def test_numero_da_bolha_tem_contraste_em_toda_a_rampa() -> None:
+    import app as pagina
+
+    for p in pagina.PALETAS.values():
+        for t in np.linspace(0, 1, 101):
+            fundo = pagina._misturar(p.bolha_vazia, p.bolha_cheia, t)
+            assert pagina._contraste(pagina._tinta_sobre(fundo), fundo) >= 4.5
