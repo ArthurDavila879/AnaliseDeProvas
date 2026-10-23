@@ -338,6 +338,8 @@ def test_app_sem_dados_pede_a_prova() -> None:
     app = AppTest.from_file(str(RAIZ / "app.py"), default_timeout=60).run()
     assert not app.exception
     assert "Usar prova simulada" in app.info[0].value
+    # Prova de exemplo para quem abre o app sem ter um CSV à mão.
+    assert len(app.get("download_button")) == 2
 
 
 def test_app_com_prova_simulada() -> None:

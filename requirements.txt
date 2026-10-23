@@ -1,8 +1,8 @@
-pandas>=2.2
-numpy>=1.26
-pytest>=8.0
-scipy>=1.11
-matplotlib>=3.8
-streamlit>=1.50
-plotly>=5.24
-ruff>=0.8
+# Dependências de execução (app e CLI). É o arquivo que o Streamlit Community Cloud instala.
+# Teto na próxima major: o deploy instala a versão mais nova, e uma major pode quebrar a API.
+pandas>=2.2,<4
+numpy>=1.26,<3
+scipy>=1.11,<2
+matplotlib>=3.8,<4
+streamlit>=1.50,<2
+plotly>=5.24,<8

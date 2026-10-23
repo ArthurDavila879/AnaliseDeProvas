@@ -1,0 +1,4 @@
+# Desenvolvimento: testes e lint (Docker e CI instalam este arquivo).
+-r requirements.txt
+pytest>=8.0,<10
+ruff==0.17.2  # versão exata: regras e formatação mudam entre versões

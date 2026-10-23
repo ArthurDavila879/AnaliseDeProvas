@@ -1,0 +1,12 @@
+# Lido pelo `streamlit run` local, pelo Docker e pelo Streamlit Community Cloud.
+[server]
+maxUploadSize = 20  # MB: uma prova de turma ou escola cabe com folga; protege a RAM do deploy gratuito
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+primaryColor = "#2a78d6"
+
+[client]
+toolbarMode = "viewer"  # esconde Deploy/Rerun/Limpar cache de quem visita o app

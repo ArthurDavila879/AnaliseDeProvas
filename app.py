@@ -8,6 +8,7 @@ Toda a análise vem de src/; aqui ficam só a interface e os gráficos.
 from __future__ import annotations
 
 import io
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -17,6 +18,8 @@ import streamlit as st
 from src import ingestao, relatorio, simulacao, tri
 
 # Cores: série principal, segunda série e alerta (sempre junto de ícone/texto, nunca só a cor).
+EXEMPLOS = Path(__file__).resolve().parent / "exemplos"
+
 COR_SERIE = "#2a78d6"
 COR_SERIE_2 = "#eb6834"
 COR_ALERTA = "#d03b3b"
@@ -26,6 +29,7 @@ FUNDO_ALERTA = "background-color: rgba(208, 59, 59, 0.14)"
 ORDEM_NIVEIS = ["fácil", "média", "difícil"]
 MIN_ALUNOS_TRI = 500  # abaixo disso o 3PL fica instável (mesmo aviso da CLI)
 MIN_ALUNOS_CURVA_EMPIRICA = 200
+MAX_ALUNOS_SIMULACAO = 10_000  # o 3PL leva ~10 s nisso; mais que isso trava o deploy gratuito
 GRADE_THETA = np.linspace(-4, 4, 161)
 
 NOMES_COLUNAS = {
@@ -101,7 +105,7 @@ def barra_lateral() -> tuple[pd.DataFrame | None, str]:
     st.sidebar.divider()
     st.sidebar.subheader("Ou use uma prova simulada")
     with st.sidebar.expander("Parâmetros da simulação"):
-        n_alunos = st.number_input("Alunos", 100, 20_000, 2_000, step=100, key="sim_alunos")
+        n_alunos = st.number_input("Alunos", 100, MAX_ALUNOS_SIMULACAO, 2_000, step=100, key="sim_alunos")
         n_questoes = st.number_input("Questões", 2, 90, 30, key="sim_questoes")
         n_problematicas = st.number_input(
             "Questões com problema",
@@ -174,10 +178,9 @@ def grafico_dificuldade_discriminacao(tabela: pd.DataFrame) -> go.Figure:
         annotation_position="bottom right",
     )
     fig.add_hline(y=0, line=dict(color="gray", width=1))
+    # Rótulos das faixas dentro do gráfico (a legenda ocupa a faixa acima dele).
     for x, texto in [(0.15, "difícil"), (0.50, "média"), (0.85, "fácil")]:
-        fig.add_annotation(
-            x=x, y=1, yref="paper", text=texto, showarrow=False, yanchor="bottom", font=dict(color="gray")
-        )
+        fig.add_annotation(x=x, y=1, yref="paper", text=texto, showarrow=False, yanchor="top", font=dict(color="gray"))
 
     com_alerta = tabela["alertas"] != ""
     for mascara, nome, cor, simbolo, modo in [
@@ -203,6 +206,9 @@ def grafico_dificuldade_discriminacao(tabela: pd.DataFrame) -> go.Figure:
             ),
         )
     fig.update_xaxes(range=[-0.02, 1.02], tickformat=".0%")
+    # Folga no topo para os rótulos das faixas não cobrirem pontos.
+    d_min, d_max = min(tabela["discriminacao"].min(), 0), max(tabela["discriminacao"].max(), 0.2)
+    fig.update_yaxes(range=[d_min - 0.1, d_max + 0.15])
     return _layout(fig, "Acerto (p): mais à direita = mais fácil", "Discriminação (D)", altura=460)
 
 
@@ -290,18 +296,29 @@ def grafico_informacao(info: pd.Series) -> go.Figure:
 def painel(resumo: dict) -> None:
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Alunos × questões", f"{resumo['n_alunos']} × {resumo['n_questoes']}")
-    c2.metric("Acerto médio", f"{resumo['acerto_medio']:.0%}", f"prova {resumo['nivel_prova']}", delta_color="off")
+    c2.metric(
+        "Acerto médio",
+        f"{resumo['acerto_medio']:.0%}",
+        f"prova {resumo['nivel_prova']}",
+        delta_color="off",
+        delta_arrow="off",
+    )
     kr20 = "—" if np.isnan(resumo["kr20"]) else f"{resumo['kr20']:.2f}"
     c3.metric(
         "Confiabilidade (KR-20)",
         kr20,
         resumo["confiabilidade"],
         delta_color="off",
+        delta_arrow="off",
         help="Consistência da prova: ≥ 0,7 aceitável · ≥ 0,8 boa · ≥ 0,9 excelente",
     )
     n_alerta = len(resumo["questoes_com_alerta"])
     c4.metric(
-        "Questões com alerta", n_alerta, ", ".join(resumo["questoes_com_alerta"][:6]) or "nenhuma", delta_color="off"
+        "Questões com alerta",
+        n_alerta,
+        ", ".join(resumo["questoes_com_alerta"][:6]) or "nenhuma",
+        delta_color="off",
+        delta_arrow="off",
     )
 
 
@@ -350,6 +367,10 @@ def main() -> None:
             st.code("aluno,q1,q2,q3\na01,A,C,B\na02,A,D,B", language="text")
             st.markdown("**gabarito.csv** (opcional; sem ele, as respostas precisam ser 0/1)")
             st.code("questao,gabarito\nq1,A\nq2,C\nq3,B", language="text")
+            st.markdown("Para testar o upload, baixe a prova de exemplo (12 alunos; a q6 tem problema de propósito):")
+            c1, c2 = st.columns(2)
+            for coluna, nome in [(c1, "respostas_exemplo.csv"), (c2, "gabarito_exemplo.csv")]:
+                coluna.download_button(nome, (EXEMPLOS / nome).read_bytes(), file_name=nome, mime="text/csv")
         st.stop()
 
     itens, resumo = analisar_classica(respostas)

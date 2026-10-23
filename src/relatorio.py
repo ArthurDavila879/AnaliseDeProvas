@@ -120,11 +120,13 @@ def grafico_b_inep(tabela: pd.DataFrame, resumo: dict, caminho: str | Path, n_ro
 
     x = np.linspace(v["b"].min(), v["b"].max(), 2)
     ax.plot(x, resumo["escala_A"] * x + resumo["escala_B"], color=tinta_2, lw=1.5, ls="--", zorder=2)
-    ax.annotate(
-        f"b_inep = {resumo['escala_A']:.2f}·b {resumo['escala_B']:+.2f}",
-        (x[1], resumo["escala_A"] * x[1] + resumo["escala_B"]),
-        textcoords="offset points",
-        xytext=(-4, 8),
+    # Canto inferior direito: os pontos sobem na diagonal, então ali fica vazio
+    # (na ponta da reta, a equação cobria os itens mais difíceis e seus rótulos).
+    ax.text(
+        0.98,
+        0.04,
+        f"reta média-desvio: b_inep = {resumo['escala_A']:.2f}·b {resumo['escala_B']:+.2f}",
+        transform=ax.transAxes,
         ha="right",
         color=tinta_2,
         fontsize=9,
